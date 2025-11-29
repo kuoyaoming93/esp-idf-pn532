@@ -348,8 +348,26 @@ esp_err_t ntag2xx_authenticate(pn532_io_handle_t io_handle, uint8_t page, uint8_
     memcpy(&pn532_packetbuffer[10], uid, uid_length);
 
     esp_err_t err = pn532_send_command_wait_ack(io_handle, pn532_packetbuffer, 10 + uid_length, PN532_WRITE_TIMEOUT);
+    if (err != ESP_OK) {
+        return err;
+    }
 
-    return err;
+    err = pn532_wait_ready(io_handle, PN532_WRITE_TIMEOUT);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = pn532_read_data(io_handle, pn532_packetbuffer, 26, PN532_READ_TIMEOUT);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    // Check if the command was successful
+    if ((pn532_packetbuffer[7] & 0x3F) != 0) {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
 }
 
 esp_err_t ntag2xx_read_page(pn532_io_handle_t io_handle, uint8_t page, uint8_t *buffer, size_t read_len)
