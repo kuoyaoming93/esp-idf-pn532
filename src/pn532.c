@@ -236,6 +236,82 @@ esp_err_t pn532_in_data_exchange(pn532_io_handle_t io_handle,
     }
 }
 
+esp_err_t pn532_in_communicate_thru(pn532_io_handle_t io_handle,
+                                    const uint8_t *send_buffer,
+                                    uint8_t send_buffer_length,
+                                    uint8_t *response,
+                                    uint8_t *response_length) {
+    if (send_buffer_length > PN532_COMMAND_BUFFER_LEN - 1) {
+#ifdef CONFIG_PN532DEBUG
+        ESP_LOGD(TAG, "APDU length too long for packet buffer");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t i;
+    pn532_packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
+    for (i = 0; i < send_buffer_length; ++i) {
+        pn532_packetbuffer[i + 1] = send_buffer[i];
+    }
+
+    esp_err_t err = pn532_send_command_wait_ack(io_handle, pn532_packetbuffer, send_buffer_length + 1, PN532_WRITE_TIMEOUT);
+    if (ESP_OK != err) {
+#ifdef CONFIG_PN532DEBUG
+        ESP_LOGD(TAG, "Could not send_buffer APDU");
+#endif
+        return err;
+    }
+
+    err = pn532_wait_ready(io_handle, 1000);
+    if (ESP_OK != err) {
+#ifdef CONFIG_PN532DEBUG
+        ESP_LOGD(TAG, "Response never received for APDU ... timeout");
+#endif
+        return err;
+    }
+
+    err = pn532_read_data(io_handle, pn532_packetbuffer, sizeof(pn532_packetbuffer), PN532_READ_TIMEOUT);
+    if (ESP_OK != err)
+        return err;
+
+    if (pn532_packetbuffer[0] == 0 && pn532_packetbuffer[1] == 0 && pn532_packetbuffer[2] == 0xff) {
+        uint8_t length = pn532_packetbuffer[3];
+        if (0 != ((pn532_packetbuffer[4] + length) & 0xFF)) {
+#ifdef CONFIG_PN532DEBUG
+            ESP_LOGD(TAG, "Length check invalid 0x%02X 0x%02X", length, pn532_packetbuffer[4]);
+#endif
+            return ESP_FAIL;
+        }
+        if (pn532_packetbuffer[5] == PN532_PN532TOHOST && pn532_packetbuffer[6] == PN532_RESPONSE_INCOMMUNICATETHRU) {
+            if ((pn532_packetbuffer[7] & 0x3f) != 0) {
+#ifdef CONFIG_PN532DEBUG
+                ESP_LOGD(TAG, "Status code indicates an error");
+#endif
+                return ESP_FAIL;
+            }
+
+            length -= 3;
+
+            if (length > *response_length) {
+                length = *response_length;
+            }
+
+            for (i = 0; i < length; ++i) {
+                response[i] = pn532_packetbuffer[8 + i];
+            }
+            *response_length = length;
+
+            return ESP_OK;
+        } else {
+            ESP_LOGD(TAG, "Don't know how to handle this command: 0x%.2X", pn532_packetbuffer[6]);
+            return ESP_FAIL;
+        }
+    } else {
+        ESP_LOGD(TAG, "Preamble missing");
+        return ESP_FAIL;
+    }
+}
+
 esp_err_t pn532_in_list_passive_target(pn532_io_handle_t io_handle) {
     pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
     pn532_packetbuffer[1] = 1;
@@ -503,4 +579,3 @@ esp_err_t ntag2xx_write_page(pn532_io_handle_t io_handle, uint8_t page, const ui
     err = pn532_read_data(io_handle, pn532_packetbuffer, 26, PN532_READ_TIMEOUT);
     return err;
 }
-

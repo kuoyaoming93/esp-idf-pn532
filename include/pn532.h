@@ -67,6 +67,7 @@ extern "C"
 #define PN532_COMMAND_TGGETTARGETSTATUS     (0x8A)
 
 #define PN532_RESPONSE_INDATAEXCHANGE       (0x41)
+#define PN532_RESPONSE_INCOMMUNICATETHRU    (0x43)
 #define PN532_RESPONSE_INLISTPASSIVETARGET  (0x4B)
 
 #define PN532_SPI_STATREAD                  (0x02)
@@ -192,6 +193,18 @@ esp_err_t pn532_read_passive_target_id(pn532_io_handle_t io_handle,
  */
 esp_err_t pn532_in_data_exchange(pn532_io_handle_t io_handle, const uint8_t *send_buffer, uint8_t send_buffer_length, uint8_t *response,
                                  uint8_t *response_length);
+
+/**
+ * Send raw data to a passive target without APDU framing.
+ * @param io_handle PN532 io handle
+ * @param send_buffer raw data to send
+ * @param send_buffer_length length of raw data
+ * @param response buffer for response data
+ * @param response_length [inout] length of received response
+ * @return ESP_OK if successful
+ */
+esp_err_t pn532_in_communicate_thru(pn532_io_handle_t io_handle, const uint8_t *send_buffer, uint8_t send_buffer_length, uint8_t *response,
+                                    uint8_t *response_length);
 
 /**
  * InLists a passive target.
